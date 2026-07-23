@@ -1,0 +1,36 @@
+services:
+  victim:
+    build:
+      context: ./victim
+    environment:
+      VICTIM_LISTEN_ADDRESS: ":8080"
+      VICTIM_WORKLOAD_SIZE: "${VICTIM_WORKLOAD_SIZE:-32MiB}"
+      VICTIM_WORKLOAD_ITERATIONS: "${VICTIM_WORKLOAD_ITERATIONS:-2}"
+    ports:
+      - "${VICTIM_PORT:-8080}:8080"
+    cpus: 1.0
+    mem_limit: 256m
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+
+  aggressor:
+    profiles:
+      - interference
+    build:
+      context: ./aggressor
+    environment:
+      AGGRESSOR_MODE: "${AGGRESSOR_MODE:-medium}"
+      AGGRESSOR_MEMORY: "${AGGRESSOR_MEMORY:-256MiB}"
+      AGGRESSOR_WORKERS: "${AGGRESSOR_WORKERS:-2}"
+      AGGRESSOR_REPORT_INTERVAL: "${AGGRESSOR_REPORT_INTERVAL:-5s}"
+    cpus: 2.0
+    mem_limit: 512m
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+
