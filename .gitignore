@@ -1,0 +1,28 @@
+# Go build and test artifacts
+/bin/
+*.test
+*.out
+coverage/
+
+# Generated benchmark results
+/results/*
+!/results/.gitkeep
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+*.tmp
+tmp/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
