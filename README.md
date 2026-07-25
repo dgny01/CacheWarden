@@ -302,12 +302,5 @@ gh repo create cachewarden --public --source=. --remote=origin --push
 Before running it, use `git remote -v` to confirm that no remote was added by
 someone else. Never overwrite an existing remote or repository.
 
-## Repository language and contributions
-
-All source code, identifiers, comments, logs, errors, documentation, ADRs,
-commit messages, issues, and pull requests use English. See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow and Conventional Commit
-policy.
-
 CacheWarden is available under the [MIT License](LICENSE).
 
