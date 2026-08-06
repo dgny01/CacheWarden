@@ -12,7 +12,7 @@ This repository currently implements only **Milestone 1: Interference Lab**.
 It does not yet include eBPF, Kubernetes integration, anomaly detection, or an
 LLM.
 
-## Quick start
+## Quick start 
 
 Run these first three commands from the repository root:
 
