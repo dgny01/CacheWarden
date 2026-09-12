@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500" role="img" aria-labelledby="title desc">
+<title id="title">Five-run average completed requests</title><desc id="desc">Five-run average completed requests</desc><rect width="900" height="500" fill="#ffffff"/>
+<style>text{font-family:Arial,sans-serif;fill:#1f2937}.title{font-size:22px;font-weight:bold}.label{font-size:14px}.value{font-size:13px;font-weight:bold}.axis{font-size:12px;fill:#4b5563}</style><text class="title" x="130" y="42">Five-run average completed requests</text>
+<line x1="130" y1="405.0" x2="820" y2="405.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="409.0" text-anchor="end">0</text>
+<line x1="130" y1="340.0" x2="820" y2="340.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="344.0" text-anchor="end">602</text>
+<line x1="130" y1="275.0" x2="820" y2="275.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="279.0" text-anchor="end">1203</text>
+<line x1="130" y1="210.0" x2="820" y2="210.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="214.0" text-anchor="end">1805</text>
+<line x1="130" y1="145.0" x2="820" y2="145.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="149.0" text-anchor="end">2407</text>
+<line x1="130" y1="80.0" x2="820" y2="80.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="84.0" text-anchor="end">3008</text>
+<rect x="401.0" y="124.8" width="70.0" height="280.2" rx="2" fill="#2563eb"/>
+<text class="value" x="436.0" y="116.8" text-anchor="middle">2593.40</text>
+<rect x="479.0" y="188.3" width="70.0" height="216.7" rx="2" fill="#dc2626"/>
+<text class="value" x="514.0" y="180.3" text-anchor="middle">2006.20</text>
+<text class="label" x="475.0" y="435" text-anchor="middle">Completed requests</text>
+<rect x="130" y="462" width="14" height="14" fill="#2563eb"/><text class="label" x="151" y="474">Baseline</text>
+<rect x="255" y="462" width="14" height="14" fill="#dc2626"/><text class="label" x="276" y="474">Interference</text>
+<text class="label" x="820" y="474" text-anchor="end">-22.64% with aggressor active</text></svg>

@@ -37,7 +37,8 @@ for output in "${BASELINE_CSV}" "${INTERFERENCE_CSV}" "${SUMMARY_FILE}"; do
 done
 
 compose() {
-  COMPOSE_PROJECT_NAME="${CACHEWARDEN_COMPOSE_PROJECT}" \
+  env \
+    COMPOSE_PROJECT_NAME="${CACHEWARDEN_COMPOSE_PROJECT}" \
     VICTIM_PORT="${VICTIM_PORT}" \
     docker compose -f "${COMPOSE_FILE}" "$@"
 }

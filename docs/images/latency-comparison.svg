@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500" role="img" aria-labelledby="title desc">
+<title id="title">Five-run average victim latency</title><desc id="desc">Five-run average victim latency</desc><rect width="900" height="500" fill="#ffffff"/>
+<style>text{font-family:Arial,sans-serif;fill:#1f2937}.title{font-size:22px;font-weight:bold}.label{font-size:14px}.value{font-size:13px;font-weight:bold}.axis{font-size:12px;fill:#4b5563}</style><text class="title" x="130" y="42">Five-run average victim latency</text>
+<line x1="130" y1="405.0" x2="820" y2="405.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="409.0" text-anchor="end">0</text>
+<line x1="130" y1="340.0" x2="820" y2="340.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="344.0" text-anchor="end">21</text>
+<line x1="130" y1="275.0" x2="820" y2="275.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="279.0" text-anchor="end">41</text>
+<line x1="130" y1="210.0" x2="820" y2="210.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="214.0" text-anchor="end">62</text>
+<line x1="130" y1="145.0" x2="820" y2="145.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="149.0" text-anchor="end">82</text>
+<line x1="130" y1="80.0" x2="820" y2="80.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="84.0" text-anchor="end">103</text>
+<rect x="163.9" y="307.7" width="48.3" height="97.3" rx="2" fill="#2563eb"/>
+<text class="value" x="188.1" y="299.7" text-anchor="middle">30.85 ms</text>
+<rect x="220.2" y="279.0" width="48.3" height="126.0" rx="2" fill="#dc2626"/>
+<text class="value" x="244.4" y="271.0" text-anchor="middle">39.94 ms</text>
+<text class="label" x="216.25" y="435" text-anchor="middle">Mean</text>
+<rect x="336.4" y="378.2" width="48.3" height="26.8" rx="2" fill="#2563eb"/>
+<text class="value" x="360.6" y="370.2" text-anchor="middle">8.49 ms</text>
+<rect x="392.8" y="367.2" width="48.3" height="37.8" rx="2" fill="#dc2626"/>
+<text class="value" x="416.9" y="359.2" text-anchor="middle">11.99 ms</text>
+<text class="label" x="388.75" y="435" text-anchor="middle">p50</text>
+<rect x="508.9" y="140.2" width="48.3" height="264.8" rx="2" fill="#2563eb"/>
+<text class="value" x="533.1" y="132.2" text-anchor="middle">83.96 ms</text>
+<rect x="565.2" y="131.2" width="48.3" height="273.8" rx="2" fill="#dc2626"/>
+<text class="value" x="589.4" y="123.2" text-anchor="middle">86.82 ms</text>
+<text class="label" x="561.25" y="435" text-anchor="middle">p95</text>
+<rect x="681.5" y="134.8" width="48.3" height="270.2" rx="2" fill="#2563eb"/>
+<text class="value" x="705.6" y="126.8" text-anchor="middle">85.66 ms</text>
+<rect x="737.8" y="124.8" width="48.3" height="280.2" rx="2" fill="#dc2626"/>
+<text class="value" x="761.9" y="116.8" text-anchor="middle">88.83 ms</text>
+<text class="label" x="733.75" y="435" text-anchor="middle">p99</text>
+<rect x="130" y="462" width="14" height="14" fill="#2563eb"/><text class="label" x="151" y="474">Baseline</text>
+<rect x="255" y="462" width="14" height="14" fill="#dc2626"/><text class="label" x="276" y="474">Interference</text></svg>
