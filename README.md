@@ -4,7 +4,7 @@ CacheWarden is an experimental systems-performance project that studies noisy-ne
 
 ## Current status
 
-CacheWarden currently provides an **interference lab**, not a production observability or remediation system. It implements a Go HTTP victim workload, a configurable Go aggressor workload, a concurrent Go HTTP load generator, Docker Compose configuration, an automated baseline-versus-interference benchmark, CSV latency output, summary statistics, tests, and CI-oriented build checks.
+CacheWarden currently provides an **interference lab**, not a production observability or remediation system. Part 1 established repeatable application-level degradation, and Part 2 used Linux `perf` and PMU counters to examine CPU execution, L3-cache behavior, and system-wide DRAM traffic. The repository implements a Go HTTP victim workload, a configurable Go aggressor workload, a concurrent Go HTTP load generator, Docker Compose configuration, an automated baseline-versus-interference benchmark, CSV latency output, summary statistics, tests, and CI-oriented build checks.
 
 It does **not** currently implement eBPF telemetry, automatic noisy-neighbor detection, cache-contention diagnosis, Kubernetes integration, anomaly detection, AI reporting, or remediation.
 
@@ -129,7 +129,9 @@ results/<timestamp>-summary.txt
 
 CSV rows contain a UTC start time, status code, latency in milliseconds, and any request error. The summary includes request totals, failures, mean, p50, p95, p99, and selected percentage changes.
 
-## Experimental results
+## Part 1 — Reproducing noisy-neighbor interference
+
+### Benchmark results
 
 The reference dataset in [`docs/data/five-run-benchmark.csv`](docs/data/five-run-benchmark.csv) contains five independent runs using the same victim configuration, 20-second phases, concurrency 4, and zero failed requests. Baseline runs the victim without the aggressor; interference enables it.
 
@@ -161,9 +163,7 @@ Regenerate the committed charts with only the Python standard library:
 python3 tools/plot_results.py
 ```
 
-## Preliminary system-level investigation
-
-### Conventional container metrics
+## Why container-level metrics were insufficient
 
 A preliminary `docker stats` observation recorded the following approximate snapshots:
 
@@ -175,7 +175,11 @@ A preliminary `docker stats` observation recorded the following approximate snap
 
 In this preliminary observation, victim application performance degraded while its conventional CPU and memory utilization remained broadly similar. This motivates investigation below ordinary container-level resource metrics. These snapshots are not rigorous proof, and Docker metrics remain useful inputs to an investigation.
 
-### PMU / `perf` investigation
+## Part 2 — Low-level performance investigation
+
+Part 2 used paired baseline/interference measurements to test whether the aggressor changed low-level execution and shared memory-subsystem behavior. These measurements narrow the investigation, but they do not by themselves identify a single root cause.
+
+### CPU execution and IPC
 
 A recent paired manual `perf` experiment produced the following measurements:
 
@@ -187,9 +191,80 @@ A recent paired manual `perf` experiment produced the following measurements:
 | IPC | 2.89 | 2.73 | -5.6% |
 | APERF / MPERF estimated frequency | 4.19 GHz | 3.78 GHz | -9.6% |
 
-The frequency estimate uses APERF/MPERF and a 2.30 GHz nominal/base frequency; cycles per task-clock were approximately 4.16 GHz in the baseline. The victim received approximately the same CPU execution time in this paired run, so this measurement does not support simple scheduling starvation. The aggressor coincided with lower effective core frequency and a modest reduction in instructions retired per cycle.
+The frequency estimate uses APERF/MPERF and a 2.30 GHz nominal/base frequency; cycles per task-clock were approximately 4.16 GHz in the baseline. The victim received approximately the same CPU execution time in this paired run, so this measurement does not support simple scheduling starvation. The aggressor coincided with lower effective core frequency and a modest reduction in instructions retired per cycle. This does not prove that frequency behavior caused the application slowdown.
 
-This is preliminary evidence, not a proven root cause. The working hypotheses include frequency/turbo/power sharing, cache/LLC interference, memory-subsystem contention, and other shared-hardware effects.
+### L3-cache experiment
+
+Three additional paired `perf` measurements collected `cycles`, `instructions`, `mem_load_retired.l3_hit`, `mem_load_retired.l3_miss`, and `cycle_activity.stalls_l3_miss`. The derived metrics are:
+
+```text
+IPC = instructions / cycles
+L3 MPKI = L3 misses / instructions * 1000
+L3 stall fraction = L3-miss stall cycles / cycles
+```
+
+The raw counter values were:
+
+| Pair | Phase | Cycles | Instructions | L3 hits | L3 misses | L3-miss stall cycles |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | Baseline | 39,401,527,525 | 112,642,239,906 | 1,747,143 | 1,152,812 | 409,145,575 |
+| 1 | Interference | 36,969,713,464 | 101,089,744,690 | 1,717,490 | 1,119,679 | 432,080,042 |
+| 2 | Baseline | 40,251,014,300 | 116,989,087,530 | 1,810,135 | 1,215,698 | 403,299,746 |
+| 2 | Interference | 27,505,150,330 | 77,972,711,839 | 1,668,254 | 1,089,851 | 287,413,785 |
+| 3 | Baseline | 39,658,072,097 | 114,999,430,347 | 1,780,220 | 1,167,341 | 411,717,149 |
+| 3 | Interference | 32,146,670,325 | 91,688,360,061 | 1,704,588 | 1,006,876 | 321,098,347 |
+
+Derived results and within-pair changes were:
+
+| Pair | IPC baseline | IPC interference | IPC change | L3 MPKI baseline | L3 MPKI interference | MPKI change | Stall baseline | Stall interference | Stall change |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 2.859 | 2.735 | -4.3% | 0.01023 | 0.01108 | +8.3% | 1.039% | 1.169% | +12.5% |
+| 2 | 2.91 | 2.83 | -2.5% | 0.01039 | 0.01398 | +34.6% | 1.00% | 1.04% | +4.3% |
+| 3 | 2.899 | 2.852 | -1.6% | 0.01015 | 0.01098 | +8.2% | 1.038% | 0.999% | -3.8% |
+
+| Signal | Direction under interference | Consistency |
+| --- | --- | --- |
+| IPC | Decreased | 3 of 3 pairs |
+| L3 MPKI | Increased | 3 of 3 pairs |
+| L3-miss stall fraction | Increased twice, decreased once | Not consistent |
+
+The aggressor therefore measurably changed the victim's execution and L3-cache behavior. The consistent IPC decrease and L3 MPKI increase are evidence of an association, but the inconsistent L3-miss stall fraction means these measurements do not establish L3 contention as the cause of the slowdown.
+
+### DRAM / memory-controller experiment
+
+The host exposes the uncore memory-controller events `unc_mc0_rdcas_count_freerun` and `unc_mc0_wrcas_count_freerun`. Each count represents one 64-byte DRAM transfer. A system-wide measurement during the controlled workload produced:
+
+| Phase | Read requests | Write requests | Duration | Read bandwidth | Write bandwidth | Total bandwidth |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 405,705,699 | 13,007,294 | ~10.0014 s | ~2.60 GB/s | ~0.083 GB/s | ~2.68 GB/s |
+| Interference | 574,839,991 | 187,609,907 | ~10.0019 s | ~3.68 GB/s | ~1.20 GB/s | ~4.88 GB/s |
+
+Total system-wide DRAM traffic increased from approximately 2.68 GB/s to 4.88 GB/s, an increase of approximately 82%. This establishes that enabling the aggressor created substantially more traffic at the shared memory controller during the measurement.
+
+These are **system-wide uncore counters**, not victim-process counters. The 4.88 GB/s value must not be attributed entirely to the victim, and the measurement does not demonstrate DRAM bandwidth saturation, DRAM latency, or either one as the cause of the victim latency increase.
+
+### PMU and TMA measurement limitations
+
+The investigation also attempted to collect `tma_info_system_dram_bw_use`, `tma_dram_bound`, `tma_mem_bandwidth`, `tma_mem_latency`, and `tma_info_memory_load_miss_real_latency`. Although `perf list` exposed some of these metrics, `perf` could not evaluate them because required underlying events were unavailable on this system. Examples included:
+
+- `UNC_ARB_TRK_REQUESTS.ALL`: not supported
+- `UNC_ARB_COH_TRK_REQUESTS.ALL`: not supported
+- `CYCLE_ACTIVITY.STALLS_L2_MISS`: unavailable
+- `MEM_LOAD_RETIRED.FB_HIT`: unavailable
+
+This is a host PMU/tooling limitation, not an application failure. It prevents this experiment from using those TMA metrics to distinguish bandwidth-bound from latency-bound behavior.
+
+### What the measurements establish
+
+| Supported by the measurements | Not established by the measurements |
+| --- | --- |
+| Repeatable application-level degradation | L3 contention as the root cause |
+| Lower IPC in all three L3 pairs | DRAM bandwidth saturation |
+| Higher L3 MPKI in all three L3 pairs | The victim consuming all measured DRAM traffic |
+| Inconsistent L3-miss stall-fraction changes | DRAM latency as the root cause |
+| Approximately 82% more system-wide DRAM traffic | CPU frequency as the root cause |
+
+The Part 2 result is deliberately bounded: the aggressor measurably changes the victim's low-level execution behavior and substantially increases shared DRAM traffic. IPC decreased and L3 MPKI increased consistently across three paired measurements, while L3-miss-related stall behavior was inconsistent. The available evidence does not identify L3 contention, DRAM bandwidth saturation, memory latency, CPU frequency, or another single mechanism as the root cause of the application slowdown.
 
 ## Metrics and observability available today
 
@@ -209,19 +284,32 @@ Prometheus is not bundled; an existing instance can scrape the victim if time-se
 - Scheduler placement, NUMA topology, caches, memory channels, frequency scaling, thermal state, and background activity are not controlled by this experiment.
 - The benchmark is closed-loop concurrency, not a fixed-rate arrival model.
 - Process-local metrics reset on restart, and container resource controls vary by runtime and platform.
-- One measurement series cannot distinguish among the current root-cause hypotheses.
+- The available measurements cannot distinguish among the remaining root-cause hypotheses.
 
-## Current investigation and roadmap
+## Current project status and Part 3
 
-1. Establish reproducible interference — completed.
-2. Characterize conventional container resource metrics — preliminary and in progress.
-3. Diagnose shared-hardware behavior with appropriate Linux and PMU telemetry — in progress.
-4. Automate collection of telemetry shown to be useful.
-5. Evaluate whether eBPF or cgroup integration improves attribution.
+1. Part 1: establish reproducible interference — completed.
+2. Part 2: characterize CPU execution, L3 behavior, and system-wide DRAM traffic — completed, without claiming a single root cause.
+3. Part 3: use the Part 2 findings to select useful signals and automate their collection where appropriate.
+4. Investigate process- and cgroup-level attribution.
+5. Use eBPF where kernel-level observability or attribution provides a concrete benefit, potentially alongside rather than instead of `perf`/PMU sources.
 6. Evaluate detection and mitigation only after the signals are understood.
 7. Validate any justified final approach in container and Kubernetes scenarios.
 
-eBPF, Kubernetes integration, and remediation remain possible directions, rather than implemented features or committed prerequisites.
+Part 3 is future work. eBPF telemetry, Kubernetes integration, and remediation are not currently implemented features or committed prerequisites.
+
+## Repository structure
+
+```text
+aggressor/       Configurable Go interference workload
+victim/          Go HTTP service under test
+tools/loadgen/   Concurrent Go HTTP load generator
+scripts/         Benchmark automation
+docs/adr/        Architecture decision records
+docs/data/       Committed Part 1 reference dataset
+docs/images/     Reproducible Part 1 result charts
+results/         Timestamped local benchmark output
+```
 
 ## Safety
 
