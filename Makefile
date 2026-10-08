@@ -6,7 +6,7 @@ COMPOSE ?= docker compose
 BIN_DIR := $(CURDIR)/bin
 GO_SOURCES := $(shell find victim aggressor tools/loadgen -type f -name '*.go' 2>/dev/null)
 
-.PHONY: help build test race lint fmt vet run-victim run-aggressor compose-up compose-interference compose-down benchmark clean
+.PHONY: help build ebpf test race lint fmt vet run-victim run-aggressor compose-up compose-interference compose-down benchmark benchmark-scheduler clean
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "  %-24s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -19,6 +19,9 @@ build: ## Build all three Go binaries.
 
 test: ## Run unit and integration tests in every Go module.
 	cd victim && $(GO) test ./...
+ebpf: ## Build the Linux eBPF scheduler collector after checking host capabilities.
+	./scripts/build_ebpf.sh
+
 	cd aggressor && $(GO) test ./...
 	cd tools/loadgen && $(GO) test ./...
 
@@ -64,4 +67,7 @@ benchmark: ## Run baseline and interference experiments.
 
 clean: ## Remove build artifacts while preserving benchmark results.
 	rm -rf -- "$(BIN_DIR)"
+benchmark-scheduler: ebpf ## Run the benchmark with paired eBPF scheduler evidence (requires privileges).
+	ENABLE_SCHEDULER=1 ./scripts/benchmark.sh
+
 
