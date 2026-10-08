@@ -18,7 +18,9 @@ case "$(uname -m)" in
 esac
 mkdir -p "${OUTPUT_DIR}"
 bpftool btf dump file /sys/kernel/btf/vmlinux format c >"${OUTPUT_DIR}/vmlinux.h"
-clang -O2 -g -target bpf -D"__TARGET_ARCH_${target_arch}" -I"${OUTPUT_DIR}" +  -c "${PROJECT_ROOT}/ebpf/scheduler.bpf.c" -o "${OUTPUT_DIR}/scheduler.bpf.o"
-clang -O2 -g "${PROJECT_ROOT}/ebpf/scheduler_collector.c" +  -o "${OUTPUT_DIR}/scheduler-collector" $(pkg-config --cflags --libs libbpf)
+clang -O2 -g -target bpf -D"__TARGET_ARCH_${target_arch}" -I"${OUTPUT_DIR}" \
+  -c "${PROJECT_ROOT}/ebpf/scheduler.bpf.c" -o "${OUTPUT_DIR}/scheduler.bpf.o"
+clang -O2 -g "${PROJECT_ROOT}/ebpf/scheduler_collector.c" \
+  -o "${OUTPUT_DIR}/scheduler-collector" $(pkg-config --cflags --libs libbpf)
 echo "Built ${OUTPUT_DIR}/scheduler.bpf.o"
 echo "Built ${OUTPUT_DIR}/scheduler-collector"

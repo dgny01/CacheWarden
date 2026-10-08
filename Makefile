@@ -19,11 +19,11 @@ build: ## Build all three Go binaries.
 
 test: ## Run unit and integration tests in every Go module.
 	cd victim && $(GO) test ./...
-ebpf: ## Build the Linux eBPF scheduler collector after checking host capabilities.
-	./scripts/build_ebpf.sh
-
 	cd aggressor && $(GO) test ./...
 	cd tools/loadgen && $(GO) test ./...
+
+ebpf: ## Build the Linux eBPF scheduler collector after checking host capabilities.
+	./scripts/build_ebpf.sh
 
 race: ## Run all tests with the Go race detector.
 	cd victim && $(GO) test -race ./...
@@ -69,5 +69,4 @@ clean: ## Remove build artifacts while preserving benchmark results.
 	rm -rf -- "$(BIN_DIR)"
 benchmark-scheduler: ebpf ## Run the benchmark with paired eBPF scheduler evidence (requires privileges).
 	ENABLE_SCHEDULER=1 ./scripts/benchmark.sh
-
 

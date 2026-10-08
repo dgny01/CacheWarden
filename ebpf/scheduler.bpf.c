@@ -8,6 +8,18 @@ struct { __uint(type, BPF_MAP_TYPE_ARRAY); __uint(max_entries, 1); __type(key, _
 /* Log2 nanosecond buckets. Bucket 63 also contains values >= 2^63 ns. */
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __uint(max_entries, 64); __type(key, __u32); __type(value, __u64); } delay_histogram SEC(".maps");
 
+static __always_inline __u32 log2_floor(__u64 value)
+{
+	__u32 result = 0;
+	if (value >> 32) { value >>= 32; result += 32; }
+	if (value >> 16) { value >>= 16; result += 16; }
+	if (value >> 8) { value >>= 8; result += 8; }
+	if (value >> 4) { value >>= 4; result += 4; }
+	if (value >> 2) { value >>= 2; result += 2; }
+	if (value >> 1) result += 1;
+	return result;
+}
+
 static __always_inline int record_wakeup(__u32 tid)
 {
 	__u64 now;
@@ -50,7 +62,7 @@ int handle_sched_switch(struct trace_event_raw_sched_switch *ctx)
 		if (delay > summary->max_delay_ns)
 			__sync_val_compare_and_swap(&summary->max_delay_ns, summary->max_delay_ns, delay);
 	}
-	bucket = delay ? 63 - __builtin_clzll(delay) : 0;
+	bucket = log2_floor(delay);
 	count = bpf_map_lookup_elem(&delay_histogram, &bucket);
 	if (count)
 		__sync_fetch_and_add(count, 1);
