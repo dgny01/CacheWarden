@@ -13,15 +13,27 @@
 #include <unistd.h>
 
 struct scheduler_stats { uint64_t observed_delays, total_delay_ns, max_delay_ns, schedule_ins; };
+#define MAX_TARGET_TIDS 4096
 static volatile sig_atomic_t stopping;
 static void stop(int signal_number) { (void)signal_number; stopping = 1; }
 
-static int add_threads(int map_fd, long process_id)
+static int contains_tid(const uint32_t *tids, size_t count, uint32_t tid)
 {
-	char path[64];
+	for (size_t index = 0; index < count; index++)
+		if (tids[index] == tid)
+			return 1;
+	return 0;
+}
+
+static int collect_process_tree(long process_id, uint32_t tids[MAX_TARGET_TIDS],
+				size_t *count)
+{
+	char path[96], children[65536];
 	struct dirent *entry;
 	DIR *directory;
-	uint8_t marker = 1;
+	FILE *input;
+	size_t first_thread = *count, after_threads;
+
 	snprintf(path, sizeof(path), "/proc/%ld/task", process_id);
 	directory = opendir(path);
 	if (!directory)
@@ -33,13 +45,79 @@ static int add_threads(int map_fd, long process_id)
 		if (errno || end == entry->d_name || *end != '\0' || value > UINT32_MAX)
 			continue;
 		uint32_t tid = (uint32_t)value;
-		if (bpf_map_update_elem(map_fd, &tid, &marker, BPF_ANY)) {
-			int saved = errno;
-			closedir(directory);
-			return -saved;
+		if (!contains_tid(tids, *count, tid)) {
+			if (*count == MAX_TARGET_TIDS) {
+				closedir(directory);
+				return -E2BIG;
+			}
+			tids[(*count)++] = tid;
 		}
 	}
 	closedir(directory);
+	after_threads = *count;
+
+	/* A child belongs to the thread that created it, so inspect every thread. */
+	for (size_t thread = first_thread; thread < after_threads; thread++) {
+		snprintf(path, sizeof(path), "/proc/%ld/task/%u/children", process_id,
+			 tids[thread]);
+		input = fopen(path, "r");
+		if (!input) {
+			if (errno == ENOENT)
+				continue;
+			return -errno;
+		}
+		if (fgets(children, sizeof(children), input)) {
+			char *cursor = children;
+			while (*cursor) {
+				char *end;
+				long child = strtol(cursor, &end, 10);
+				if (end == cursor)
+					break;
+				if (child > 0) {
+					int child_result = collect_process_tree(child, tids, count);
+					/* A short-lived child may disappear during enumeration. */
+					if (child_result && child_result != -ENOENT) {
+						fclose(input);
+						return child_result;
+					}
+				}
+				cursor = end;
+			}
+		}
+		fclose(input);
+	}
+	return 0;
+}
+
+static int sync_threads(int map_fd, int runnable_fd, long process_id)
+{
+	uint32_t tids[MAX_TARGET_TIDS], existing[MAX_TARGET_TIDS], key, next;
+	size_t count = 0, existing_count = 0;
+	uint8_t marker = 1;
+	int result = collect_process_tree(process_id, tids, &count);
+
+	if (result)
+		return result;
+	for (size_t index = 0; index < count; index++)
+		if (bpf_map_update_elem(map_fd, &tids[index], &marker, BPF_ANY))
+			return -errno;
+	if (!bpf_map_get_next_key(map_fd, NULL, &next)) {
+		do {
+			key = next;
+			if (existing_count == MAX_TARGET_TIDS)
+				return -E2BIG;
+			existing[existing_count++] = key;
+		} while (!bpf_map_get_next_key(map_fd, &key, &next));
+	}
+	for (size_t index = 0; index < existing_count; index++) {
+		if (contains_tid(tids, count, existing[index]))
+			continue;
+		if (bpf_map_delete_elem(map_fd, &existing[index]) && errno != ENOENT)
+			return -errno;
+		/* Do not retain a timestamp if this numeric TID is later reused. */
+		if (bpf_map_delete_elem(runnable_fd, &existing[index]) && errno != ENOENT)
+			return -errno;
+	}
 	return 0;
 }
 
@@ -104,7 +182,7 @@ int main(int argc, char **argv)
 	const char *object_path = NULL, *output_path = NULL;
 	long process_id = 0;
 	size_t link_count = 0, attached = 0;
-	int target_fd, stats_fd, histogram_fd, result = 1;
+	int target_fd, runnable_fd, stats_fd, histogram_fd, result = 1;
 	struct timespec interval = {.tv_nsec = 100000000};
 	uint32_t zero = 0;
 
@@ -150,25 +228,27 @@ int main(int argc, char **argv)
 		attached++;
 	}
 	target_fd = bpf_object__find_map_fd_by_name(object, "target_tids");
+	runnable_fd = bpf_object__find_map_fd_by_name(object, "runnable_since");
 	stats_fd = bpf_object__find_map_fd_by_name(object, "stats");
 	histogram_fd = bpf_object__find_map_fd_by_name(object, "delay_histogram");
-	if (target_fd < 0 || stats_fd < 0 || histogram_fd < 0) {
+	if (target_fd < 0 || runnable_fd < 0 || stats_fd < 0 || histogram_fd < 0) {
 		fprintf(stderr, "scheduler-collector: required BPF maps were not found\n");
 		goto cleanup;
 	}
-	if (add_threads(target_fd, process_id)) {
-		fprintf(stderr, "scheduler-collector: cannot inspect /proc/%ld/task; verify the victim host PID and permissions\n", process_id);
+	if (sync_threads(target_fd, runnable_fd, process_id)) {
+		fprintf(stderr, "scheduler-collector: cannot inspect process tree rooted at /proc/%ld; verify the victim host PID and permissions\n", process_id);
 		goto cleanup;
 	}
 	signal(SIGINT, stop);
 	signal(SIGTERM, stop);
 	fprintf(stderr, "scheduler-collector: observing victim process %ld; press Ctrl+C to stop\n", process_id);
 	while (!stopping) {
-		int refresh = add_threads(target_fd, process_id);
+		int refresh = sync_threads(target_fd, runnable_fd, process_id);
 		if (refresh == -ENOENT)
 			break;
 		if (refresh) {
-			fprintf(stderr, "scheduler-collector: failed to refresh victim thread IDs\n");
+			fprintf(stderr, "scheduler-collector: failed to synchronize victim process-tree thread IDs: %s\n",
+				strerror(-refresh));
 			goto cleanup;
 		}
 		nanosleep(&interval, NULL);

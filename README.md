@@ -4,9 +4,9 @@ CacheWarden is an experimental systems-performance project that studies noisy-ne
 
 ## Current status
 
-CacheWarden currently provides an **interference lab**, not a production observability or remediation system. Part 1 established repeatable application-level degradation, and Part 2 used Linux `perf` and PMU counters to examine CPU execution, L3-cache behavior, and system-wide DRAM traffic. The repository implements a Go HTTP victim workload, a configurable Go aggressor workload, a concurrent Go HTTP load generator, Docker Compose configuration, an automated baseline-versus-interference benchmark, CSV latency output, summary statistics, tests, and CI-oriented build checks.
+CacheWarden currently provides an **interference lab**, not a production observability or remediation system. Part 1 established repeatable application-level degradation, and Part 2 used Linux `perf` and PMU counters to examine CPU execution, L3-cache behavior, and system-wide DRAM traffic. The repository implements a Go HTTP victim workload, a configurable Go aggressor workload, a concurrent Go HTTP load generator, Docker Compose configuration, an automated baseline-versus-interference benchmark, optional eBPF scheduler measurements, CSV output, summary statistics, tests, and CI-oriented build checks.
 
-It does **not** currently implement eBPF telemetry, automatic noisy-neighbor detection, cache-contention diagnosis, Kubernetes integration, anomaly detection, AI reporting, or remediation.
+It does **not** implement automatic noisy-neighbor detection, cache-contention diagnosis, Kubernetes integration, anomaly detection, AI reporting, or remediation. Its eBPF support is deliberately limited to scheduler evidence for the benchmark victim.
 
 ## Key experimental finding
 
@@ -128,6 +128,35 @@ results/<timestamp>-summary.txt
 ```
 
 CSV rows contain a UTC start time, status code, latency in milliseconds, and any request error. The summary includes request totals, failures, mean, p50, p95, p99, and selected percentage changes.
+
+### Optional eBPF scheduler measurements
+
+The scheduler collector requires Linux with kernel BTF at `/sys/kernel/btf/vmlinux`, `clang`, `bpftool`, `pkg-config`, and the libbpf development package. On Ubuntu, install the build dependencies and compile with:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y clang bpftool libbpf-dev pkg-config
+make ebpf
+```
+
+Loading and attaching BPF programs normally requires root, or an explicitly configured set of `CAP_BPF`, `CAP_PERFMON`, `CAP_SYS_RESOURCE`, and, on older kernels, possibly `CAP_SYS_ADMIN` capabilities. Kernel lockdown and `kernel.unprivileged_bpf_disabled` can impose additional restrictions. The simplest validation on a dedicated Ubuntu test host is:
+
+```bash
+sudo make benchmark-scheduler
+```
+
+`benchmark-scheduler` builds the collector and runs the normal benchmark with `ENABLE_SCHEDULER=1`. The script obtains the victim container's host init PID from Docker and continuously tracks all threads in the process tree below it, including the actual victim process behind Compose's init shim. A fresh collector is started immediately before each load phase and stopped before the next phase. Interrupt and error cleanup terminates the collector and Compose services.
+
+In addition to the normal files, a successful run creates:
+
+```text
+results/<timestamp>-baseline-scheduler.csv
+results/<timestamp>-interference-scheduler.csv
+```
+
+The scheduler CSV schema is `metric,value,unit`. `schedule_ins` counts switches onto a CPU for tracked threads. `observed_delays` counts schedule-ins for which a runnable timestamp was available. `total_delay_ns` and `mean_delay_ns` describe time spent runnable but not executing. `p50_delay_upper_bound_ns`, `p95_delay_upper_bound_ns`, and `p99_delay_upper_bound_ns` are upper bounds from base-2 nanosecond histogram buckets, not exact quantiles; `max_delay_ns` is the largest observed delay. Non-empty histogram rows contain per-bucket counts.
+
+The scheduler data has several important limits: wakeups or preemptions that occur before a newly created thread is discovered can be missed; thread discovery is periodically synchronized rather than cgroup-native; percentile precision is limited by logarithmic buckets; and a measurement ending while a thread is still runnable has no completed delay to record. The tracepoints measure scheduler run-queue delay, not CPU time, cache misses, or the cause of application latency. Results are host- and kernel-specific.
 
 ## Part 1 — Reproducing noisy-neighbor interference
 
@@ -276,7 +305,7 @@ The Part 2 result is deliberately bounded: the aggressor measurably changes the 
 - `cachewarden_http_errors_total`
 - `cachewarden_http_active_requests`
 
-Prometheus is not bundled; an existing instance can scrape the victim if time-series collection is needed. The benchmark additionally provides request-level CSV latency data and summary percentiles. PMU collection is currently a manual investigation, not an integrated telemetry feature.
+Prometheus is not bundled; an existing instance can scrape the victim if time-series collection is needed. The benchmark additionally provides request-level CSV latency data, summary percentiles, and optional paired eBPF scheduler CSVs. PMU collection remains a manual investigation.
 
 ## Limitations
 
@@ -290,9 +319,9 @@ Prometheus is not bundled; an existing instance can scrape the victim if time-se
 
 1. Part 1: establish reproducible interference — completed.
 2. Part 2: characterize CPU execution, L3 behavior, and system-wide DRAM traffic — completed, without claiming a single root cause.
-3. Part 3: use the Part 2 findings to select useful signals and automate their collection where appropriate.
+3. Part 3: initial scheduler collection is integrated; additional signals still require justification and validation.
 4. Investigate process- and cgroup-level attribution.
-5. Use eBPF where kernel-level observability or attribution provides a concrete benefit, potentially alongside rather than instead of `perf`/PMU sources.
+5. Continue using eBPF only where kernel-level observability or attribution provides a concrete benefit, potentially alongside rather than instead of `perf`/PMU sources.
 6. Evaluate detection and mitigation only after the signals are understood.
 7. Validate any justified final approach in container and Kubernetes scenarios.
 
