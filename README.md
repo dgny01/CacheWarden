@@ -188,7 +188,7 @@ The reference dataset in [`docs/data/five-run-benchmark.csv`](docs/data/five-run
 
 All five runs had the same qualitative direction: latency increased and completed request count decreased. Failures were zero. These host- and configuration-specific measurements demonstrate repeatable degradation when the aggressor is active; they do not establish LLC/cache contention, memory-bandwidth saturation, or another single cause.
 
-Regenerate the committed charts with only the Python standard library:
+Regenerate the committed charts from the reference datasets with only the Python standard library:
 
 ```bash
 python3 tools/plot_results.py
@@ -303,7 +303,9 @@ Part 3 adds operating-system-level evidence by measuring how long tracked victim
 
 ### Paired scheduler results
 
-Four paired experiments produced the following scheduler-delay means from the generated scheduler CSVs:
+Four paired experiments produced the following scheduler-delay means from the generated scheduler CSVs. The values used to regenerate the chart are preserved in [`docs/data/four-run-scheduler.csv`](docs/data/four-run-scheduler.csv).
+
+![Mean scheduler run-queue delay across four paired experiments](docs/images/scheduler-delay-comparison.svg)
 
 | Run ID | Baseline mean | Interference mean | Change |
 | --- | ---: | ---: | ---: |
@@ -367,8 +369,9 @@ victim/          Go HTTP service under test
 tools/loadgen/   Concurrent Go HTTP load generator
 scripts/         Benchmark automation
 docs/adr/        Architecture decision records
-docs/data/       Committed Part 1 reference dataset
-docs/images/     Reproducible Part 1 result charts
+docs/data/       Committed Part 1 and Part 3 reference datasets
+docs/images/     Reproducible experiment result charts
+ebpf/            Linux scheduler tracing programs and userspace collector
 results/         Timestamped local benchmark output
 ```
 
