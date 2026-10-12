@@ -3,6 +3,7 @@
 #include <bpf/bpf_helpers.h>
 char LICENSE[] SEC("license") = "GPL";
 struct scheduler_stats { __u64 observed_delays, total_delay_ns, max_delay_ns, schedule_ins; };
+#define MAX_DELAY_UPDATE_RETRIES 4
 struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, 4096); __type(key, __u32); __type(value, __u8); } target_tids SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, 16384); __type(key, __u32); __type(value, __u64); } runnable_since SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __uint(max_entries, 1); __type(key, __u32); __type(value, struct scheduler_stats); } stats SEC(".maps");
@@ -80,7 +81,17 @@ int handle_sched_switch(struct bpf_raw_tracepoint_args *ctx)
 		__sync_fetch_and_add(&summary->observed_delays, 1);
 		__sync_fetch_and_add(&summary->total_delay_ns, delay);
 		old_max = summary->max_delay_ns;
-		while (delay > old_max) {
+		/*
+		 * Keep the retry count statically bounded so the verifier can prove
+		 * termination. The CAS prevents a smaller delay from overwriting a
+		 * concurrent larger one. Under sustained contention all retries can
+		 * lose, in which case max_delay_ns may temporarily under-report the
+		 * true maximum; later observations can still raise it.
+		 */
+#pragma unroll
+		for (int retry = 0; retry < MAX_DELAY_UPDATE_RETRIES; retry++) {
+			if (delay <= old_max)
+				break;
 			__u64 seen = __sync_val_compare_and_swap(&summary->max_delay_ns,
 							 old_max, delay);
 			if (seen == old_max)

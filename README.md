@@ -4,13 +4,13 @@ CacheWarden is an experimental systems-performance project that studies noisy-ne
 
 ## Current status
 
-CacheWarden currently provides an **interference lab**, not a production observability or remediation system. Part 1 established repeatable application-level degradation, and Part 2 used Linux `perf` and PMU counters to examine CPU execution, L3-cache behavior, and system-wide DRAM traffic. The repository implements a Go HTTP victim workload, a configurable Go aggressor workload, a concurrent Go HTTP load generator, Docker Compose configuration, an automated baseline-versus-interference benchmark, optional eBPF scheduler measurements, CSV output, summary statistics, tests, and CI-oriented build checks.
+CacheWarden currently provides an **interference lab**, not a production observability or remediation system. Part 1 established repeatable application-level degradation, Part 2 used Linux `perf` and PMU counters to examine CPU execution, L3-cache behavior, and system-wide DRAM traffic, and Part 3 added paired eBPF measurements of scheduler run-queue delay. The repository implements a Go HTTP victim workload, a configurable Go aggressor workload, a concurrent Go HTTP load generator, Docker Compose configuration, an automated baseline-versus-interference benchmark, optional eBPF scheduler measurements, CSV output, summary statistics, tests, and CI-oriented build checks.
 
 It does **not** implement automatic noisy-neighbor detection, cache-contention diagnosis, Kubernetes integration, anomaly detection, AI reporting, or remediation. Its eBPF support is deliberately limited to scheduler evidence for the benchmark victim.
 
 ## Key experimental finding
 
-Across five controlled runs, enabling the aggressor increased mean victim latency by approximately 29% and reduced completed requests by approximately 23%, while preliminary container-level observations showed similar victim CPU and memory utilization.
+Across five controlled application runs, enabling the aggressor increased mean victim latency by approximately 29% and reduced completed requests by approximately 23%, while preliminary container-level observations showed similar victim CPU and memory utilization. In four later paired scheduler experiments, mean scheduler delay increased in every interference phase, by approximately 10% when comparing the arithmetic mean across conditions.
 
 These experiments establish repeatable interference, not its root cause.
 
@@ -147,6 +147,8 @@ sudo make benchmark-scheduler
 
 `benchmark-scheduler` builds the collector and runs the normal benchmark with `ENABLE_SCHEDULER=1`. The script obtains the victim container's host init PID from Docker and continuously tracks all threads in the process tree below it, including the actual victim process behind Compose's init shim. A fresh collector is started immediately before each load phase and stopped before the next phase. Interrupt and error cleanup terminates the collector and Compose services.
 
+The eBPF program records runnable timestamps from `sched_wakeup` and `sched_wakeup_new`, and from `sched_switch` when a tracked task is preempted or otherwise switched out while still runnable. On the next switch to that task, it subtracts the saved timestamp from `bpf_ktime_get_ns()`, deletes the timestamp, and updates the count, total, maximum, and log2 histogram. The shared counters and maximum use atomic operations. The maximum update uses a verifier-compatible bounded compare-and-swap retry; under sustained contention, exhausting the retries can cause `max_delay_ns` to under-report an observation rather than permit a non-atomic overwrite.
+
 In addition to the normal files, a successful run creates:
 
 ```text
@@ -154,7 +156,7 @@ results/<timestamp>-baseline-scheduler.csv
 results/<timestamp>-interference-scheduler.csv
 ```
 
-The scheduler CSV schema is `metric,value,unit`. `schedule_ins` counts switches onto a CPU for tracked threads. `observed_delays` counts schedule-ins for which a runnable timestamp was available. `total_delay_ns` and `mean_delay_ns` describe time spent runnable but not executing. `p50_delay_upper_bound_ns`, `p95_delay_upper_bound_ns`, and `p99_delay_upper_bound_ns` are upper bounds from base-2 nanosecond histogram buckets, not exact quantiles; `max_delay_ns` is the largest observed delay. Non-empty histogram rows contain per-bucket counts.
+The scheduler CSV schema is `metric,value,unit`. `schedule_ins` counts switches onto a CPU for tracked threads. `observed_delays` counts schedule-ins for which a runnable timestamp was available. `total_delay_ns` and `mean_delay_ns` describe time spent runnable but not executing. `p50_delay_upper_bound_ns`, `p95_delay_upper_bound_ns`, and `p99_delay_upper_bound_ns` are upper bounds from base-2 nanosecond histogram buckets, not exact quantiles; `max_delay_ns` is intended to track the largest observed delay, subject to the bounded-update limitation described below. Non-empty histogram rows contain per-bucket counts.
 
 The scheduler data has several important limits: wakeups or preemptions that occur before a newly created thread is discovered can be missed; thread discovery is periodically synchronized rather than cgroup-native; percentile precision is limited by logarithmic buckets; and a measurement ending while a thread is still runnable has no completed delay to record. The tracepoints measure scheduler run-queue delay, not CPU time, cache misses, or the cause of application latency. Results are host- and kernel-specific.
 
@@ -295,6 +297,38 @@ This is a host PMU/tooling limitation, not an application failure. It prevents t
 
 The Part 2 result is deliberately bounded: the aggressor measurably changes the victim's low-level execution behavior and substantially increases shared DRAM traffic. IPC decreased and L3 MPKI increased consistently across three paired measurements, while L3-miss-related stall behavior was inconsistent. The available evidence does not identify L3 contention, DRAM bandwidth saturation, memory latency, CPU frequency, or another single mechanism as the root cause of the application slowdown.
 
+## Part 3 — eBPF scheduler observability
+
+Part 3 adds operating-system-level evidence by measuring how long tracked victim threads remain runnable before executing. The benchmark attaches eBPF programs to scheduler wakeup and switch tracepoints, follows the victim container's host process tree, and collects one fresh measurement for each baseline and interference load phase. This measures scheduler run-queue delay for observed transitions; it does not measure CPU execution time, cache misses, or application latency directly.
+
+### Paired scheduler results
+
+Four paired experiments produced the following scheduler-delay means from the generated scheduler CSVs:
+
+| Run ID | Baseline mean | Interference mean | Change |
+| --- | ---: | ---: | ---: |
+| `20261011T201551Z` | 4,829,080 ns | 5,241,832 ns | +8.55% |
+| `20261012T113331Z` | 4,552,242 ns | 5,116,104 ns | +12.39% |
+| `20261012T123202Z` | 4,749,082 ns | 5,339,204 ns | +12.43% |
+| `20261012T123305Z` | 4,715,717 ns | 5,044,729 ns | +6.98% |
+| Arithmetic mean across runs | 4,711,530 ns | 5,185,467 ns | +10.06% |
+
+Each percentage is calculated within its baseline/interference pair. The final row first takes the unweighted arithmetic mean of the four reported baseline means and the four reported interference means, then calculates the percentage difference between those two condition means. It is not weighted by `observed_delays`; the average of the four within-pair percentage changes would instead be 10.08%.
+
+Mean scheduler delay increased under interference in all four pairs. This is additional evidence that the victim's operating-system-level behavior changed when the aggressor was active, alongside the application-level latency and throughput changes from Part 1 and the CPU, cache, and memory-controller observations from Part 2.
+
+### Histogram interpretation and consistency
+
+All eight scheduler CSVs report a p50 upper bound of 4,095 ns and p95 and p99 upper bounds of 134,217,727 ns. These are upper bounds of base-2 nanosecond histogram buckets, not exact percentile values; in particular, 134,217,727 ns must not be read as a precise p95 or p99 scheduler delay. The combination of a microsecond-scale median upper bound and a millisecond-scale mean is consistent with a highly skewed distribution in which relatively rare, large delays raise the mean.
+
+For the `20261011T201551Z` interference phase, `observed_delays` is 12,530 and the sum of all emitted histogram bucket counts is also 12,530. This establishes internal count consistency for that CSV, but it does not independently validate timestamp coverage or measurement accuracy.
+
+### Interpretation and limitations
+
+The scheduler evidence does not establish scheduling delay as the primary cause of the application slowdown. Similarly, the Part 2 increase in L3 MPKI does not independently prove L3 contention, and the system-wide DRAM-traffic increase does not prove bandwidth saturation. Taken together, the three parts demonstrate repeatable performance degradation accompanied by measurable changes at the application, CPU/cache/memory-controller, and scheduler levels, but they do not establish a definitive single root cause.
+
+Scheduler-specific limitations include periodically discovered process-tree membership rather than cgroup-native tracking; missed wakeups or preemptions before a new thread is discovered; no completed delay for a task still runnable when collection stops; coarse percentile bounds from log2 buckets; and a bounded atomic maximum update that can under-report under sustained update contention. Results and percentages are specific to this host, configuration, synthetic workload, and measurement period, and should not be generalized to arbitrary systems or production workloads.
+
 ## Metrics and observability available today
 
 `GET /metrics` exposes Prometheus text metrics:
@@ -315,17 +349,15 @@ Prometheus is not bundled; an existing instance can scrape the victim if time-se
 - Process-local metrics reset on restart, and container resource controls vary by runtime and platform.
 - The available measurements cannot distinguish among the remaining root-cause hypotheses.
 
-## Current project status and Part 3
+## Project scope and summary
 
-1. Part 1: establish reproducible interference — completed.
-2. Part 2: characterize CPU execution, L3 behavior, and system-wide DRAM traffic — completed, without claiming a single root cause.
-3. Part 3: initial scheduler collection is integrated; additional signals still require justification and validation.
-4. Investigate process- and cgroup-level attribution.
-5. Continue using eBPF only where kernel-level observability or attribution provides a concrete benefit, potentially alongside rather than instead of `perf`/PMU sources.
-6. Evaluate detection and mitigation only after the signals are understood.
-7. Validate any justified final approach in container and Kubernetes scenarios.
+1. Part 1 established reproducible application-level degradation: higher latency and fewer completed requests under interference.
+2. Part 2 established associated changes in CPU execution and L3 behavior, plus substantially higher system-wide DRAM traffic, without identifying a single causal mechanism.
+3. Part 3 established higher mean scheduler delay in all four paired experiments, adding scheduler-level evidence without proving that scheduling is the primary cause.
 
-Part 3 is future work. eBPF telemetry, Kubernetes integration, and remediation are not currently implemented features or committed prerequisites.
+Collectively, the three parts show that the controlled aggressor produces repeatable victim degradation accompanied by observable changes across several layers of the system. They support a structured performance investigation, not a definitive causal diagnosis.
+
+**CacheWarden v1.0 is a reproducible performance investigation laboratory for containerized noisy-neighbor interference. It is not an automated root-cause diagnosis, anomaly detection, or remediation platform.** Kubernetes integration, automatic detection, and remediation are not implemented.
 
 ## Repository structure
 
