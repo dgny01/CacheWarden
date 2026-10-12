@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="540" viewBox="0 0 900 540" role="img" aria-labelledby="title desc">
+<title id="title">Mean scheduler run-queue delay by experiment</title><desc id="desc">Mean scheduler run-queue delay by experiment</desc><rect width="900" height="540" fill="#ffffff"/>
+<style>text{font-family:Arial,sans-serif;fill:#1f2937}.title{font-size:22px;font-weight:bold}.label{font-size:14px}.value{font-size:13px;font-weight:bold}.axis{font-size:12px;fill:#4b5563}</style><text class="title" x="130" y="42">Mean scheduler run-queue delay by experiment</text>
+<rect x="130" y="54" width="14" height="14" fill="#2563eb"/><text class="label" x="151" y="66">Baseline</text>
+<rect x="255" y="54" width="14" height="14" fill="#dc2626"/><text class="label" x="276" y="66">Interference</text>
+<text class="label" x="820" y="65" text-anchor="end">+10.06% between unweighted condition means</text>
+<text class="label" x="24" y="247.5" text-anchor="middle" transform="rotate(-90 24 247.5)">Mean scheduler delay (ms)</text>
+<line x1="130" y1="405.0" x2="820" y2="405.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="409.0" text-anchor="end">0.0</text>
+<line x1="130" y1="342.0" x2="820" y2="342.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="346.0" text-anchor="end">1.2</text>
+<line x1="130" y1="279.0" x2="820" y2="279.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="283.0" text-anchor="end">2.5</text>
+<line x1="130" y1="216.0" x2="820" y2="216.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="220.0" text-anchor="end">3.7</text>
+<line x1="130" y1="153.0" x2="820" y2="153.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="157.0" text-anchor="end">5.0</text>
+<line x1="130" y1="90.0" x2="820" y2="90.0" stroke="#d1d5db"/>
+<text class="axis" x="118" y="94.0" text-anchor="end">6.2</text>
+<rect x="164.2" y="159.4" width="48" height="245.6" rx="2" fill="#2563eb"/>
+<text class="value" x="188.2" y="151.4" text-anchor="middle">4.83</text>
+<rect x="220.2" y="138.4" width="48" height="266.6" rx="2" fill="#dc2626"/>
+<text class="value" x="244.2" y="130.4" text-anchor="middle">5.24</text>
+<text class="axis" x="216.2" y="430" text-anchor="middle">10/11 20:15</text>
+<rect x="336.8" y="173.5" width="48" height="231.5" rx="2" fill="#2563eb"/>
+<text class="value" x="360.8" y="165.5" text-anchor="middle">4.55</text>
+<rect x="392.8" y="144.8" width="48" height="260.2" rx="2" fill="#dc2626"/>
+<text class="value" x="416.8" y="136.8" text-anchor="middle">5.12</text>
+<text class="axis" x="388.8" y="430" text-anchor="middle">10/12 11:33</text>
+<rect x="509.2" y="163.5" width="48" height="241.5" rx="2" fill="#2563eb"/>
+<text class="value" x="533.2" y="155.5" text-anchor="middle">4.75</text>
+<rect x="565.2" y="133.4" width="48" height="271.6" rx="2" fill="#dc2626"/>
+<text class="value" x="589.2" y="125.4" text-anchor="middle">5.34</text>
+<text class="axis" x="561.2" y="430" text-anchor="middle">10/12 12:32</text>
+<rect x="681.8" y="165.2" width="48" height="239.8" rx="2" fill="#2563eb"/>
+<text class="value" x="705.8" y="157.2" text-anchor="middle">4.72</text>
+<rect x="737.8" y="148.4" width="48" height="256.6" rx="2" fill="#dc2626"/>
+<text class="value" x="761.8" y="140.4" text-anchor="middle">5.04</text>
+<text class="axis" x="733.8" y="430" text-anchor="middle">10/12 12:33</text>
+<text class="label" x="475.0" y="453" text-anchor="middle">Experiment start (UTC)</text></svg>

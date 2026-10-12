@@ -10,7 +10,7 @@ It does **not** implement automatic noisy-neighbor detection, cache-contention d
 
 ## Key experimental finding
 
-Across five controlled application runs, enabling the aggressor increased mean victim latency by approximately 29% and reduced completed requests by approximately 23%, while preliminary container-level observations showed similar victim CPU and memory utilization. In four later paired scheduler experiments, mean scheduler delay increased in every interference phase, by approximately 10% when comparing the arithmetic mean across conditions.
+Across five controlled application runs, enabling the aggressor increased mean victim latency by 29.42% and reduced completed requests by 22.66%, while preliminary container-level observations showed similar victim CPU and memory utilization. In four later paired scheduler experiments, mean scheduler delay increased in every interference phase, by 10.06% when comparing the unweighted arithmetic means across conditions.
 
 These experiments establish repeatable interference, not its root cause.
 
@@ -185,6 +185,8 @@ The reference dataset in [`docs/data/five-run-benchmark.csv`](docs/data/five-run
 | p95 latency | 83.96 ms | 86.82 ms | +3.40% |
 | p99 latency | 85.66 ms | 88.83 ms | +3.69% |
 | Completed requests | 2,593 | 2,006 | -22.66% |
+
+The change column is the unweighted arithmetic mean of the five within-pair percentage changes. The displayed baseline and interference columns are the separately rounded arithmetic means for each condition.
 
 All five runs had the same qualitative direction: latency increased and completed request count decreased. Failures were zero. These host- and configuration-specific measurements demonstrate repeatable degradation when the aggressor is active; they do not establish LLC/cache contention, memory-bandwidth saturation, or another single cause.
 
@@ -366,7 +368,7 @@ Collectively, the three parts show that the controlled aggressor produces repeat
 ```text
 aggressor/       Configurable Go interference workload
 victim/          Go HTTP service under test
-tools/loadgen/   Concurrent Go HTTP load generator
+tools/           Concurrent Go HTTP load generator and reference-chart generator
 scripts/         Benchmark automation
 docs/adr/        Architecture decision records
 docs/data/       Committed Part 1 and Part 3 reference datasets
